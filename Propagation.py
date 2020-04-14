@@ -8,6 +8,16 @@ import numpy.fft as fft
 hbar = 6.582119569e-16
 c = 299792458
 
+''' Plane wave '''
+def Plane_source(E,z0,N=1000,dx=1e-6):
+    omega = E/hbar
+    wavelength = 2*np.pi*c/omega
+    k = omega/c
+    x = np.linspace(-N/2,N/2-1,N) * dx
+    x,y = np.meshgrid(x,x)
+    beam = np.ones(x.shape) * np.exp(-1j * k * z0)
+    return beam, x, y
+
 ''' Gaussian beam '''
 def Gaussian_source(E,w0x,w0y,N,z0):
     omega = E/hbar
@@ -79,12 +89,26 @@ def Mirror(beam,x,y,wavelength, l,alpha,direction='horizontal',shapeError = None
     return beam_mirror
 
 # lens
-def Lens(beam,x,y,k,r,f,n):
+def Lens(beam,x,y,k,r,f):
     window = window = np.square(x)+np.square(y)<np.square(r/1e6)
     if window.sum() <= window.size:
         print('lens aperture smaller than beam')
-    beam_lens = beam * window * np.exp(-1j * k/2/f * (np.square(x)+np.square(y)))
+    transmission = np.exp(-1j * k/2/f * (np.square(x)+np.square(y))) * window
+    T = NFFT(transmission)
+    G = NFFT(beam)
+    G = G*T
+    beam_lens = INFFT(G)
+    
+    #phase = f * (1-np.cos(np.arcsin(np.sqrt(np.square(x)+np.square(y))/f)))
+    #beam_lens = beam * window * np.exp(1j*phase)
     return beam_lens
+
+# arbitrary optics (n, thickness):
+def ArbOpt(beam,x,y,k,optx,opty,optz,n):
+    height_max = optz.max()
+    delta_phi = k * n * height_max + k * (height_max - optz)
+    beam_arbopt = beam*np.exp(1j*delta_phi)
+    return beam_arbopt
 
 ''' Propagation '''
 def Ibeam(input):
