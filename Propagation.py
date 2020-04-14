@@ -90,18 +90,26 @@ def Mirror(beam,x,y,wavelength, l,alpha,direction='horizontal',shapeError = None
 
 # lens
 def Lens(beam,x,y,k,r,f):
+    dx = x[0,1] - x[0,0]
+    fxMax = 1.0/(2.0*dx)
+    N = x.shape[0]
+    dfx = fxMax/N
+    fx = np.linspace(-fxMax, fxMax-dfx, N)
+    fy = np.copy(fx)
+    fx, fy = np.meshgrid(fx,fy)
+
+    # lens aperture
     window = window = np.square(x)+np.square(y)<np.square(r/1e6)
     if window.sum() <= window.size:
         print('lens aperture smaller than beam')
-    transmission = np.exp(-1j * k/2/f * (np.square(x)+np.square(y))) * window
-    T = NFFT(transmission)
-    G = NFFT(beam)
-    G = G*T
-    beam_lens = INFFT(G)
-    
-    #phase = f * (1-np.cos(np.arcsin(np.sqrt(np.square(x)+np.square(y))/f)))
-    #beam_lens = beam * window * np.exp(1j*phase)
-    return beam_lens
+    # lens as FFT
+    G = NFFT(beam * window)
+    # new axis
+    wavelength = 2*np.pi/k
+    x1 = fx * wavelength * f
+    y1 = fy * wavelength * f
+    beam_lens = np.exp(1j*k/2/f * (np.square(x1)+np.square(y1)))/1j/wavelength/f * G
+    return beam_lens, x1, y1
 
 # arbitrary optics (n, thickness):
 def ArbOpt(beam,x,y,k,optx,opty,optz,n):
