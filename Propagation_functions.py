@@ -112,7 +112,7 @@ def Lens(beam,x,y,k,r,f):
     return beam_lens, x1, y1
 
 # arbitrary optics (n, thickness):
-def ArbOpt(beam,x,y,k,optx,opty,optz,n):
+def ArbOpt(beam,x,y,k,optz,n):
     height_max = optz.max()
     delta_phi = k * n * height_max + k * (height_max - optz)
     beam_arbopt = beam*np.exp(1j*delta_phi)
@@ -143,3 +143,4 @@ def Drift(beam,x,y,wavelength,dz):
     G = NFFT(beam)
     G = G*np.exp(1j*kz*dz)*filter0
     beam_drift = INFFT(G)
+    return beam_drift
