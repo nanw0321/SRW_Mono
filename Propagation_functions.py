@@ -143,4 +143,3 @@ def Drift(beam,x,y,wavelength,dz):
     G = NFFT(beam)
     G = G*np.exp(1j*kz*dz)*filter0
     beam_drift = INFFT(G)
-    return beam_drift
