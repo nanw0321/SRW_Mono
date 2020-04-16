@@ -144,3 +144,32 @@ def Drift(beam,x,y,wavelength,dz):
     G = G*np.exp(1j*kz*dz)*filter0
     beam_drift = INFFT(G)
     return beam_drift
+
+def Focus(beam,x,y,wavelength,f):
+    dx = x[0,1] - x[0,0]
+    fxMax = 1.0/(2.0*dx)
+    N = x.shape[0]
+    dfx = fxMax/N
+    fx = np.linspace(-fxMax, fxMax-dfx, N)
+    fy = np.copy(fx)
+    fx, fy = np.meshgrid(fx,fy)
+
+    phase = np.exp(1j * np.pi/wavelength/f * (np.square(x)+np.square(y)))
+
+    x1 = fx * wavelength * f
+    y1 = fy * wavelength * f
+
+    phase1 = np.exp(1j * np.pi/wavelength/f * (np.square(x1)+np.square(y1)))
+
+    dx1 = x1[0,1] - x1[0,0]
+    fxMax1 = 1.0/(2.0*dx1)
+    dfx1 = fxMax1/N
+    fx1 = np.linspace(-fxMax1, fxMax1-dfx1, N)
+    fx1, fy1 = np.meshgrid(fx1,fx1)
+
+    k = 2*np.pi/wavelength
+    kz1 = k * (np.sqrt( 1.0 - (wavelength*fx1)**2 - (wavelength*fy1)**2 ))
+    filter1 = fx1**2 + fy1**2 < (1.0/wavelength)**2
+
+    beam_focus = NFFT(phase * beam) * phase1
+    return beam_focus, x1, y1, kz1, filter1
