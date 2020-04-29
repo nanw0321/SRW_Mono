@@ -56,6 +56,14 @@ def Slit(beam,x,y,slit_x,slit_y):
     beam_slit = beam * window
     return beam_slit
 
+def Double_slit(beam,x,y,wid,sep):
+	window1 = (np.abs(y-sep/2)<=wid/1e6)
+	window2 = (np.abs(y+sep/2)<=wid/1e6)
+	if window1.sum() + window2.sum() <= 10:
+		print('slit too narrow, {} pixels'.format(window1.sum()+window2.sum()))
+	beam_slit = beam * (window1+window2)
+	return beam_slit
+
 def CircApt(beam,x,y,r):
     window = np.square(x)+np.square(y)<np.square(r)
     if window.sum() <= 10:
