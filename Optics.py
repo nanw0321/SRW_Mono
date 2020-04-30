@@ -1,5 +1,5 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
 # OE thickness functions
 def Perfect_lens(x,y,n,f,xoff=0,yoff=0):
     delta_d = f - np.sqrt(f**2-np.square(x-xoff)-np.square(y-yoff))
@@ -54,68 +54,41 @@ def Pinhole_array(x,y,r_hole,nhx,nhy):
                 z[xi:xf,yi:yf] = Pinhole(xl,yl,r_hole,xlcent,ylcent)
     return z
 '''
-def Prism(x,y,slope,intersection,xoff=0.,yoff=0.):
-    # input x, y: the x&y axis for the a single prism (meshgrid).
-    # input xoff, yoff: x,y coordinate of the prism center (default to 0,0)
+def Prism(x,y,n,f,d_hole):
+    n = n-1
     nx,ny = x.shape
-    window_size = (np.max(x) - np.min(x))*0.3/2
-    # z1 is prism1 
-    z1 = np.ones((nx,ny)) * 1e30
-    left1 = np.where( (x[0,:]-xoff) <= - window_size)
-    window1 = np.where(( (x[0,:]-xoff) < window_size) & (-window_size < (x[0,:]-xoff)))
-    right1 = np.where(window_size <= (x[0,:]-xoff) )
-
-    for i in range(ny):
-        z1[left1,i] = - slope * (x[0,left1]-xoff) + intersection
-        z1[right1,i] = slope * (x[0,right1]-xoff) + intersection
-        z1[window1,i] = 0 
-
-    #z2 is prism2
-    z2 = np.ones((nx,ny)) * 1e30
-    left2 = np.where((y[:,0]-yoff) <= - window_size)
-    window2 = np.where(((y[:,0]-yoff) < window_size) & (-window_size < (y[:,0]-yoff)))
-    right2 = np.where(window_size <= (y[:,0]-yoff))
-
-    for i in range(nx):
-        z2[i,left2] = - slope * (y[left2,0]-yoff) + intersection
-        z2[i,right2] = slope * (y[right2,0]-yoff) + intersection
-        z2[i,window2] = 0 
-    z = z1 + z2
-    return z
-
-def Prism(x,y,slope,d_hole,xoff=0.,yoff=0.):
-    nx,ny = x.shape
+    dl = x.max()-x.min()                    # width of the whole prism
+    hmax = -np.sqrt((f**2*n**2)/((2*n-n**2)**2) - ((dl-d_hole)**2)/(2*n-n**2)) + f*n/(2*n - n**2)   # maximum height needed
+    #print('maximum height', hmax)
+    slope = np.abs(2*hmax/(dl-d_hole))
+    #print('slope', slope)
     # For prism in x:
-    z1 = np.zeros((nx,ny))
-    index1 = (x[0]-xoff)>=d_hole/2. # one edge
-    nn = index1.sum()
-    z1[:,-nn:] = slope * (x[:,-nn:]-xoff)
+    z1 = np.zeros((nx,ny))                  # initialize prism
+    index1 = x[0]>=d_hole/2.         # one edge
+    nn = index1.sum()                       # get indicies of window boundary
+    z1[:,-nn:] = slope * (x[:,-nn:]-d_hole/2)   # assign height
     z1 = z1 + np.fliplr(z1)
-    
     # For prism in y:
     z2 = z1.T
     z = z1+z2
     return z
 '''
-def Prism(x,y,n,f,d_hole,xoff=0.,yoff=0.):
-    n = n-1
+def Prism(x,y,n,f,d_hole):
     nx,ny = x.shape
     dl = x.max()-x.min()                    # width of the whole prism
-    hmax = -np.sqrt((f**2*n**2)/((2*n-n**2)**2) - ((dl-d_hole)**2)/(2*n-n**2)) + f*n/(2*n - n**2)   # maximum height needed
-    print('maximum height', hmax)
-    slope = np.abs(2*hmax/(dl-d_hole))
-    print('slope', slope)
+    #print('slope', slope)
     # For prism in x:
     z1 = np.zeros((nx,ny))                  # initialize prism
-    index1 = (x[0]-xoff)>=d_hole/2.         # one edge
+    index1 = x[0]>=d_hole/2.                # one edge
     nn = index1.sum()                       # get indicies of window boundary
-    z1[:,-nn:] = slope * (x[:,-nn:]-xoff)   # assign height
+    delta_d = (x[:,-nn:]-d_hole/2) * d_hole/f     # OPD needed for phase shift
+    z1[:,-nn:] = -delta_d/(n-1)             # assign height
     z1 = z1 + np.fliplr(z1)
     # For prism in y:
     z2 = z1.T
     z = z1+z2
-
     return z
+
 def Prism_array(x,y,n,f,d_hole,npx,npy):
     # input npx, npy: # of individual prisms in each dimension.
     # output z: height profile of the entire optical element.
@@ -134,10 +107,16 @@ def Prism_array(x,y,n,f,d_hole,npx,npy):
                 yf = (jl+1)*npts
                 xl = x[xi:xf,yi:yf]     # x&y axis for a single prism
                 yl = y[xi:xf,yi:yf]
-                xlcent = xl.mean()      # single prism center position
-                ylcent = yl.mean()
-                z[xi:xf,yi:yf] = Prism(xl,yl,n,f,d_hole,xlcent,ylcent)
-    return z
+                xl = xl - xl.mean()
+                yl = yl - yl.mean()
+                z[xi:xf,yi:yf] = Prism(xl,yl,n,f,d_hole)
+                if il == jl == 1:
+                    plt.figure()
+                    plt.imshow(z[xi:xf,yi:yf],cmap='jet')
+                    plt.colorbar()
+                    print(xl.min(), xl.max())
+                    print(yl.min(), yl.max())
+    return xl, yl, z
 
 def Double_slit(x,y,wid,sep,xoff=0.,yoff=0.):
     nx,ny = x.shape
@@ -151,7 +130,7 @@ def Double_slit(x,y,wid,sep,xoff=0.,yoff=0.):
     return z
 
 # function to calculate optical path differnece and amplitude transmission
-def Calc_OPD_and_AmpTr(srwTr, thicknessProfData, n, d_abs):
+def Calc_OPD_and_AmpTr(srwTr, thicknessProfData, n, d_abs, nlx=10, nly=10, roix=4, roiy=4):
     N = len(thicknessProfData[0])
     auxMesh = srwTr.mesh
     nx = auxMesh.nx
@@ -167,12 +146,18 @@ def Calc_OPD_and_AmpTr(srwTr, thicknessProfData, n, d_abs):
             OPD[thicknessProfData>=1e30] = 0.
         #for iy in range(ny):
         #    for ix in range(nx):
-        for iy in (np.arange(int(ny*0.4))+int(ny*0.3)):
-            for ix in (np.arange(int(nx*0.4))+int(nx*0.3)):
-                ofst = 2*ix + 2*nx*iy
-                srwTr.arTr[ofst]=Tr[iy,ix]
-                #srwTr.arTr[ofst] = 1.0
-                srwTr.arTr[ofst+1]=OPD[iy,ix]
+        err = 0
+        for iy in (np.arange(int(ny*roiy/nly))+int(ny*(nly-roiy)/nly/2)):
+            for ix in (np.arange(int(nx*roix/nlx))+int(nx*(nlx-roix)/nlx/2)):
+                try:
+                    ofst = 2*ix + 2*nx*iy
+                    srwTr.arTr[ofst]=Tr[iy,ix]
+                    #srwTr.arTr[ofst] = 1.0
+                    srwTr.arTr[ofst+1]=OPD[iy,ix]
+                except:
+                    err+=1
+        if err > 0:
+            print('lens roi > lens array by {} pixels'.format(err))
     else:
         print('OE shape not matched')
 
