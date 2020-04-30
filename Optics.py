@@ -98,11 +98,12 @@ def Prism(x,y,slope,d_hole,xoff=0.,yoff=0.):
     return z
 '''
 def Prism(x,y,n,f,d_hole,xoff=0.,yoff=0.):
+    n = n-1
     nx,ny = x.shape
     dl = x.max()-x.min()                    # width of the whole prism
     hmax = -np.sqrt((f**2*n**2)/((2*n-n**2)**2) - ((dl-d_hole)**2)/(2*n-n**2)) + f*n/(2*n - n**2)   # maximum height needed
     print('maximum height', hmax)
-    slope = np.abs(2*hmax/(dl-d_hole))*1e5
+    slope = np.abs(2*hmax/(dl-d_hole))
     print('slope', slope)
     # For prism in x:
     z1 = np.zeros((nx,ny))                  # initialize prism
@@ -113,9 +114,9 @@ def Prism(x,y,n,f,d_hole,xoff=0.,yoff=0.):
     # For prism in y:
     z2 = z1.T
     z = z1+z2
-    return z
 
-def Prism_array(x,y,slope,d_hole,npx,npy):
+    return z
+def Prism_array(x,y,n,f,d_hole,npx,npy):
     # input npx, npy: # of individual prisms in each dimension.
     # output z: height profile of the entire optical element.
     nx,ny = x.shape                         # dimension of the input 
@@ -135,7 +136,7 @@ def Prism_array(x,y,slope,d_hole,npx,npy):
                 yl = y[xi:xf,yi:yf]
                 xlcent = xl.mean()      # single prism center position
                 ylcent = yl.mean()
-                z[xi:xf,yi:yf] = Prism(xl,yl,slope,d_hole,xlcent,ylcent)
+                z[xi:xf,yi:yf] = Prism(xl,yl,n,f,d_hole,xlcent,ylcent)
     return z
 
 def Double_slit(x,y,wid,sep,xoff=0.,yoff=0.):
@@ -169,8 +170,8 @@ def Calc_OPD_and_AmpTr(srwTr, thicknessProfData, n, d_abs):
         for iy in (np.arange(int(ny*0.4))+int(ny*0.3)):
             for ix in (np.arange(int(nx*0.4))+int(nx*0.3)):
                 ofst = 2*ix + 2*nx*iy
-                #srwTr.arTr[ofst]=Tr[iy,ix]
-                srwTr.arTr[ofst] = 1.0
+                srwTr.arTr[ofst]=Tr[iy,ix]
+                #srwTr.arTr[ofst] = 1.0
                 srwTr.arTr[ofst+1]=OPD[iy,ix]
     else:
         print('OE shape not matched')
