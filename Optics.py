@@ -53,29 +53,12 @@ def Pinhole_array(x,y,r_hole,nhx,nhy):
                 ylcent = yl.mean()
                 z[xi:xf,yi:yf] = Pinhole(xl,yl,r_hole,xlcent,ylcent)
     return z
-'''
-def Prism(x,y,n,f,d_hole):
-    n = n-1
+
+
+def Prism(x,y,n,f):
     nx,ny = x.shape
     dl = x.max()-x.min()                    # width of the whole prism
-    hmax = -np.sqrt((f**2*n**2)/((2*n-n**2)**2) - ((dl-d_hole)**2)/(2*n-n**2)) + f*n/(2*n - n**2)   # maximum height needed
-    #print('maximum height', hmax)
-    slope = np.abs(2*hmax/(dl-d_hole))
-    #print('slope', slope)
-    # For prism in x:
-    z1 = np.zeros((nx,ny))                  # initialize prism
-    index1 = x[0]>=d_hole/2.         # one edge
-    nn = index1.sum()                       # get indicies of window boundary
-    z1[:,-nn:] = slope * (x[:,-nn:]-d_hole/2)   # assign height
-    z1 = z1 + np.fliplr(z1)
-    # For prism in y:
-    z2 = z1.T
-    z = z1+z2
-    return z
-'''
-def Prism(x,y,n,f,d_hole):
-    nx,ny = x.shape
-    dl = x.max()-x.min()                    # width of the whole prism
+    d_hole = dl/3
     #print('slope', slope)
     # For prism in x:
     z1 = np.zeros((nx,ny))                  # initialize prism
@@ -88,8 +71,41 @@ def Prism(x,y,n,f,d_hole):
     z2 = z1.T
     z = z1+z2
     return z
+'''
 
-def Prism_array(x,y,n,f,d_hole,npx,npy):
+def Prism(x,y,n,f):
+    nx,ny = x.shape
+    dl = (x.max()-x.min())/2   # width of the whole prism
+    d_hole = dl*0.3
+    hmax = -np.sqrt((f**2*n**2)/((2*n-n**2)**2) - ((dl-d_hole)**2)/(2*n-n**2)) + f*n/(2*n - n**2)   # maximum height needed
+#     print('maximum height', hmax)
+    slope = - hmax/(d_hole - dl)
+    b = d_hole*hmax/(d_hole-dl)
+#     print('slope', slope)
+#     print('b',b)
+    
+    # For prism in x:
+    z1 = np.zeros((nx,ny))                  # initialize prism
+    index1 = (x[0]) > d_hole          # one edge
+    nn = index1.sum()   # get indicies of window boundary
+
+    z1[:,-nn:] = slope * (x[:,-nn:]) + b # assign height
+    z1 = z1 + np.fliplr(z1)
+#     fig = plt.figure()
+#     ax = plt.axes(projection='3d')
+#     ax.contour3D(xx, yy, z1, 50, cmap='binary')
+#     ax.set_xlabel('x')
+#     ax.set_ylabel('y')
+#     ax.set_zlabel('z')
+#     plt.figure()
+#     plt.plot(z1[1,:])
+    # For prism in y:
+    z2 = z1.T
+    z = z1+z2
+    return z
+'''
+
+def Prism_array(x,y,n,f,npx,npy):
     # input npx, npy: # of individual prisms in each dimension.
     # output z: height profile of the entire optical element.
     nx,ny = x.shape                         # dimension of the input 
@@ -109,14 +125,14 @@ def Prism_array(x,y,n,f,d_hole,npx,npy):
                 yl = y[xi:xf,yi:yf]
                 xl = xl - xl.mean()
                 yl = yl - yl.mean()
-                z[xi:xf,yi:yf] = Prism(xl,yl,n,f,d_hole)
+                z[xi:xf,yi:yf] = Prism(xl,yl,n,f)
                 if il == jl == 1:
                     plt.figure()
                     plt.imshow(z[xi:xf,yi:yf],cmap='jet')
                     plt.colorbar()
                     print(xl.min(), xl.max())
                     print(yl.min(), yl.max())
-    return xl, yl, z
+    return z
 
 def Double_slit(x,y,wid,sep,xoff=0.,yoff=0.):
     nx,ny = x.shape
