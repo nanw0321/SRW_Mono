@@ -1,6 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 # OE thickness functions
+def Flat_Mirror(x,y):
+    z = np.zeros_like(x)
+    return z
+
+def Square_Aperture(x,y,dx,dy,xoff=0.,yoff=0.):
+    z = np.ones(x.shape)*1e30
+    window = (np.abs(x-xoff)<= dx/2) * (np.abs(y-yoff)<=dy/2)
+    z[window] = 0.
+    return z
+
 def Perfect_lens(x,y,n,f,xoff=0,yoff=0):
     delta_d = f - np.sqrt(f**2-np.square(x-xoff)-np.square(y-yoff))
     z = -delta_d/(n-1)
@@ -30,7 +40,7 @@ def Perfect_lens_array(x,y,n,f,nlx,nly):
 def Pinhole(x,y,r_hole,xoff=0.,yoff=0.):
     z = np.ones(x.shape)*1e30
     window = (np.square(x-xoff)+np.square(y-yoff))<=r_hole**2
-    z[window]=0
+    z[window]=0.
     return z
 
 def Pinhole_array(x,y,r_hole,nhx,nhy):
@@ -126,12 +136,6 @@ def Prism_array(x,y,n,f,npx,npy):
                 xl = xl - xl.mean()
                 yl = yl - yl.mean()
                 z[xi:xf,yi:yf] = Prism(xl,yl,n,f)
-                if il == jl == 1:
-                    plt.figure()
-                    plt.imshow(z[xi:xf,yi:yf],cmap='jet')
-                    plt.colorbar()
-                    print(xl.min(), xl.max())
-                    print(yl.min(), yl.max())
     return z
 
 def Double_slit(x,y,wid,sep,xoff=0.,yoff=0.):
@@ -146,7 +150,7 @@ def Double_slit(x,y,wid,sep,xoff=0.,yoff=0.):
     return z
 
 # function to calculate optical path differnece and amplitude transmission
-def Calc_OPD_and_AmpTr(srwTr, thicknessProfData, n, d_abs, nlx=10, nly=10, roix=4, roiy=4):
+def Calc_OPD_and_AmpTr(srwTr, thicknessProfData, n, d_abs, nlx=1, nly=1, roix=1, roiy=1):
     N = len(thicknessProfData[0])
     auxMesh = srwTr.mesh
     nx = auxMesh.nx
@@ -177,3 +181,16 @@ def Calc_OPD_and_AmpTr(srwTr, thicknessProfData, n, d_abs, nlx=10, nly=10, roix=
     else:
         print('OE shape not matched')
 
+def Calc_OPD_and_AmpTr_Mirror(srwTr, heightProfData, theta):
+    N = len(heightProfData)
+    auxMesh = srwTr.mesh
+    nx = auxMesh.nx
+    ny = auxMesh.ny
+    if heightProfData.shape==(nx,ny):
+        for iy in range(ny):
+            for ix in range(nx):
+                ofst = 2*ix + 2*nx*iy
+                srwTr.arTr[ofst] = 1.
+                srwTr.arTr[ofst+1] = 2. * heightProfData[iy,ix] * np.sin(theta)
+    else:
+        print('OE shape not matched')
