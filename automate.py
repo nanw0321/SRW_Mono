@@ -1,0 +1,8 @@
+awc0, tc0, intc0t = plot_temporal(mwf, label='on crystal 0',fov=200e-15, pulse_duration = pulse_duration)
+awc1, tc1, intc1t = plot_temporal(mwf_c1, label='on crystal 1',fov=200e-15, pulse_duration = pulse_duration)
+awl0, tl0, intl0t = plot_temporal(mwf_l0, label='on lens 0',fov=200e-15, pulse_duration = pulse_duration)
+awapt, tapt, intaptt = plot_temporal(mwf_apt, label='on slit',fov=200e-15, pulse_duration = pulse_duration)
+awl1, tl1, intl1t = plot_temporal(mwf_l1, label='on lens 1',fov=200e-15, pulse_duration = pulse_duration)
+awc2, tc2, intc2t = plot_temporal(mwf_c2, label='on crystal 2',fov=200e-15, pulse_duration = pulse_duration)
+awc3, tc3, intc3t = plot_temporal(mwf_c3, label='on crystal 3',fov=200e-15, pulse_duration = pulse_duration)
+awdet, tdet, intdett = plot_temporal(mwf_det, label='on det',fov=200e-15, pulse_duration = pulse_duration)
