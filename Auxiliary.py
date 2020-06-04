@@ -167,18 +167,25 @@ def plot_temporal(wf, color, label=None, fov=1e30, pulse_duration = None):
     plt.ylabel('normalized temporal energy', fontsize=18)
     return aw, axis_t, int0
 
-def plot_tilt(wf, color, label=None, ori='V'):
+def plot_tilt(wf, color, label=None, ori='V', if_log=0):
     axis, tilt = get_tilt(wf, ori=ori)
     aw, axis_t, int0 = get_temporal(wf)
     if ori == 'V':
         alabel = 'y'
     else:
         alabel = 'x'
+    title = 'wavefront tilt at '+label
+    if if_log == 1:
+        tilt = np.log(tilt)
+        title = 'wavefront tilt at '+label+', log'
     plt.imshow(tilt,cmap='jet',
         extent = [axis_t.min()*1e15, axis_t.max()*1e15, axis.min()*1e6, axis.max()*1e6])
     plt.colorbar()
+    if if_log == 1:
+        cmin = np.log(0.01*tilt.max())
+        plt.clim(cmin)
     plt.axis('tight')
-    plt.title('wavefront tilt at '+label, fontsize=18)
+    plt.title(title, fontsize=18)
     plt.xlabel('time (fs)', fontsize=18)
     plt.ylabel(alabel+r' ($\mu$m)', fontsize=18)
 
