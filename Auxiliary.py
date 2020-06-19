@@ -1,5 +1,5 @@
 import numpy as np
-import os, copy
+import os, copy, h5py
 import pylab as plt
 
 # import base wavefront and beamline class
@@ -18,24 +18,13 @@ from wpg.srwlib import srwl, srwl_opt_setup_CRL, SRWLOptD, SRWLOptA, SRWLOptC, S
 from wpg.wpg_uti_wf import propagate_wavefront, plot_t_wf, get_intensity_on_axis
 from wpg.wpg_uti_oe import show_transmission
 
+''' trivia '''
 def E2L(e):
     hbar = 6.582119569e-16
     omega = e/hbar
     frequency = omega /2/np.pi
     wavelength = 3e8/frequency
     return wavelength
-
-def calc_stretching(thetaB, ang_as, range_xy):
-    L = range_xy/np.tan(thetaB-ang_as)
-    delta = np.cos(thetaB+ang_as)/np.sin(thetaB-ang_as)*range_xy - L
-    trange = np.abs(delta)/3e8
-    return trange
-
-def calcThetaO(thetaB, ang_as, n):
-    theta1 = np.arcsin(1/n * np.sin(np.pi/2-thetaB+ang_as))
-    theta2 = np.arcsin(n * np.sin(theta1-2*ang_as))
-    thetaOut = np.pi/2-ang_as-theta2
-    return thetaOut
 
 def mkdir_p(path):
     """
@@ -50,45 +39,29 @@ def mkdir_p(path):
             pass
         else: raise
 
-def plot_spatial(wf):
-    srwl.SetRepresElecField(wf._srwl_wf, 't')
-    [xmin, xmax, ymin, ymax] = wf.get_limits()
-    img = wf.get_intensity().sum(axis=-1)
-    plt.figure()
-    plt.imshow(img,cmap='jet',
-        extent = [xmin*1e6, xmax*1e6, ymin*1e6, ymax*1e6])
-    plt.colorbar()
-    plt.xlabel(r'x ($\mu$m)',fontsize=18)
-    plt.ylabel(r'y ($\mu$m)',fontsize=18)
+''' crystals '''
+def calc_stretching(thetaB, ang_as, range_xy):
+    L = range_xy/np.tan(thetaB-ang_as)
+    delta = np.cos(thetaB+ang_as)/np.sin(thetaB-ang_as)*range_xy - L
+    trange = np.abs(delta)/3e8
+    return trange
 
-def plot_lineout(wf, color, label=None, fov=1e30, ori='V', if_log=1, if_norm=0):
-    srwl.SetRepresElecField(wf._srwl_wf, 't')
-    mesh = wf.params.Mesh
-    [xmin, xmax, ymin, ymax] = wf.get_limits()
-    img = wf.get_intensity().sum(axis=-1)
-    if ori == 'V':
-        # vertical plane
-        axis = np.linspace(ymin, ymax, mesh.ny) * 1e6
-        lineout = img[:,int(mesh.nx/2)]
-        aname = 'y'
-    else:
-        # horizontal plane
-        axis = np.linspace(xmin, xmax, mesh.nx) * 1e6
-        lineout = img[int(mesh.ny/2),:]
-        aname = 'x'
-    if if_norm== 1:
-        lineout = lineout/lineout.sum()
-    index = np.argwhere(np.abs(axis)<fov/2)
-    axis = axis[index.min():index.max()]
-    lineout = lineout[index.min():index.max()]
-    plt.plot(axis, lineout, color, label=label)
-    plt.legend(fontsize=18)
-    plt.title('lineout', fontsize=18)
-    plt.xlabel(aname+r' ($\mu$m}', fontsize=18)
-    plt.ylabel('beam intensity (a.u.)', fontsize=18)
-    if if_log == 1:
-        plt.yscale('log')
+def calcThetaO(thetaB, ang_as, n):
+    theta1 = np.arcsin(1/n * np.sin(np.pi/2-thetaB+ang_as))
+    theta2 = np.arcsin(n * np.sin(theta1-2*ang_as))
+    thetaOut = np.pi/2-ang_as-theta2
+    return thetaOut
 
+def set_crystal_orient(cryst, e, ang_dif_pl, flip=0):
+    if flip == 1:
+        ang_dif_pl = ang_dif_pl+np.pi
+    nvx, nvy, nvz = cryst.find_orient(
+        e,ang_dif_pl)[0][2]             # outward normal vector to crystal surface
+    tvx, tvy, _ = cryst.find_orient(
+        e,ang_dif_pl)[0][0]      # central tangential vector
+    cryst.set_orient(nvx,nvy,nvz,tvx,tvy)
+
+''' wf '''
 def get_spectra(wf):
     # change the wavefront into frequency domain, where each slice in z represent a photon energy.
     srwl.SetRepresElecField(wf._srwl_wf, 'f')
@@ -139,16 +112,90 @@ def get_tilt(wf, ori='V'):
         tilt = wf.get_intensity()[int(mesh.ny/2),:,:]
     return axis, tilt
 
-def plot_spectra(wf, color, label=None):
+''' I/O '''
+def compress_save(wf, fname, ori='V'):
     aw, axis_ev, int0 = get_spectra(wf)
+    _, axis_t, int1 = get_temporal(wf)
+    axis, tilt = get_tilt(wf,ori=ori)
+
+    with h5py.File(fname,'w') as f:
+        grp0 = f.create_group("spectrum")
+        grp0.create_dataset("index", data=aw)
+        grp0.create_dataset("axis", data=axis_ev)
+        grp0.create_dataset("spectra", data=int0)
+
+        grp1 = f.create_group("structure")
+        grp1.create_dataset("axis", data=axis)
+        grp1.create_dataset("tilt",data=tilt)
+        grp1.create_dataset("ori",data=ori)
+
+        grp2 = f.create_group("temporal")
+        grp2.create_dataset("axis", data=axis_t)
+        grp2.create_dataset("intensity", data=int1)
+
+def get_spectra_from_file(fname):
+    with h5py.File(fname,'r') as f:
+        aw = f["spectrum/index"][:]
+        axis_ev = f["spectrum/axis"][:]
+        int_ev = f["spectrum/spectra"][:]
+    return aw, axis_ev, int_ev
+
+def get_temporal_from_file(fname):
+    with h5py.File(fname,'r') as f:
+        aw = f["spectrum/index"][:]
+        axis_t = f["temporal/axis"][:]
+        int_ev = f["temporal/intensity"][:]
+    return aw, axis_ev, int_ev
+
+''' plot wavefront '''
+def plot_spatial(wf):
+    srwl.SetRepresElecField(wf._srwl_wf, 't')
+    [xmin, xmax, ymin, ymax] = wf.get_limits()
+    img = wf.get_intensity().sum(axis=-1)
+    plt.figure()
+    plt.imshow(img,cmap='jet',
+        extent = [xmin*1e6, xmax*1e6, ymin*1e6, ymax*1e6])
+    plt.colorbar()
+    plt.xlabel(r'x ($\mu$m)',fontsize=18)
+    plt.ylabel(r'y ($\mu$m)',fontsize=18)
+
+def plot_lineout(wf, color, label=None, fov=1e30, ori='V', if_log=1, if_norm=0):
+    srwl.SetRepresElecField(wf._srwl_wf, 't')
+    mesh = wf.params.Mesh
+    [xmin, xmax, ymin, ymax] = wf.get_limits()
+    img = wf.get_intensity().sum(axis=-1)
+    if ori == 'V':
+        # vertical plane
+        axis = np.linspace(ymin, ymax, mesh.ny) * 1e6
+        lineout = img[:,int(mesh.nx/2)]
+        aname = 'y'
+    else:
+        # horizontal plane
+        axis = np.linspace(xmin, xmax, mesh.nx) * 1e6
+        lineout = img[int(mesh.ny/2),:]
+        aname = 'x'
+    if if_norm== 1:
+        lineout = lineout/lineout.sum()
+    index = np.argwhere(np.abs(axis)<fov/2)
+    axis = axis[index.min():index.max()]
+    lineout = lineout[index.min():index.max()]
+    plt.plot(axis, lineout, color, label=label)
+    plt.legend(fontsize=18)
+    plt.title('lineout', fontsize=18)
+    plt.xlabel(aname+r' ($\mu$m}', fontsize=18)
+    plt.ylabel('beam intensity (a.u.)', fontsize=18)
+    if if_log == 1:
+        plt.yscale('log')
+
+def plot_spectra(aw, axis_ev, int0, color, label=None):
     plt.plot(axis_ev, int0/int0.max(), color, label=label)
     plt.ylim([-0.1,1.1])
     plt.legend(fontsize=18)
-    plt.title('spectral energy, meaningful range: {}-{} eV'.format(
+    plt.title('spectral energy\nmeaningful range: {}-{} eV'.format(
         round(axis_ev[aw[0]],2),round(axis_ev[aw[-1]],2)),fontsize=18)
     plt.xlabel('eV',fontsize=18)
     plt.ylabel('normalized spectral energy', fontsize=18)
-    return aw, axis_ev, int0
+
 
 def plot_temporal(wf, color, label=None, fov=1e30, pulse_duration = None):
     aw, axis_t, int0 = get_temporal(wf)
@@ -167,9 +214,10 @@ def plot_temporal(wf, color, label=None, fov=1e30, pulse_duration = None):
     plt.ylabel('normalized temporal energy', fontsize=18)
     return aw, axis_t, int0
 
-def plot_tilt(wf, color, label=None, ori='V', if_log=0):
-    axis, tilt = get_tilt(wf, ori=ori)
-    aw, axis_t, int0 = get_temporal(wf)
+''' wavefront tilting '''
+def plot_tilt(axis, tilt, axis_t, label=None, ori='V', if_log=0):
+    tilt = tilt/tilt.max()
+    tilt = tilt + 1e-30
     if ori == 'V':
         alabel = 'y'
     else:
@@ -177,27 +225,74 @@ def plot_tilt(wf, color, label=None, ori='V', if_log=0):
     title = 'wavefront tilt at '+label
     if if_log == 1:
         tilt = np.log(tilt)
-        title = 'wavefront tilt at '+label+', log'
-    plt.imshow(tilt,cmap='jet',
-        extent = [axis_t.min()*1e15, axis_t.max()*1e15, axis.min()*1e6, axis.max()*1e6])
+        title = title+', log'
+    plt.imshow(tilt, cmap='jet',
+              extent = [axis_t.max()*1e15, axis_t.min()*1e15, axis.max()*1e6, axis.min()*1e6])
     plt.colorbar()
     if if_log == 1:
-        cmin = np.log(0.01*tilt.max())
+        cmin = np.max(tilt)-10
         plt.clim(cmin)
     plt.axis('tight')
     plt.title(title, fontsize=18)
     plt.xlabel('time (fs)', fontsize=18)
     plt.ylabel(alabel+r' ($\mu$m)', fontsize=18)
 
-def set_crystal_orient(cryst, e, ang_dif_pl, flip=0):
-    if flip == 1:
-        ang_dif_pl = ang_dif_pl+np.pi
-    nvx, nvy, nvz = cryst.find_orient(
-        e,ang_dif_pl)[0][2]             # outward normal vector to crystal surface
-    tvx, tvy, _ = cryst.find_orient(
-        e,ang_dif_pl)[0][0]      # central tangential vector
-    cryst.set_orient(nvx,nvy,nvz,tvx,tvy)
+def plot_tilt_from_wf(wf, label=None, ori='V', if_log=0):
+    axis, tilt = get_tilt(wf, ori=ori)
+    _, axis_t, _ = get_temporal(wf)
+    plot_tilt(axis, tilt, axis_t, label=label, ori=ori, if_log=if_log)
 
+def plot_tilt_from_file(fname, label=None, if_log=0):
+    with h5py.File(fname,'r') as f:
+        axis = f["structure/axis"][:]
+        tilt = f["structure/tilt"][:]
+        ori = f["structure/ori"][...]
+        
+        axis_t = f["temporal/axis"][:]
+    plot_tilt(axis, tilt, axis_t, label=label, ori=ori, if_log=if_log)
+
+''' spatial spectral structure '''
+def plot_tilt_freq(axis, tiltfft, axis_ev, label=None, ori='V', if_log=0):
+    tiltfft = tiltfft/tiltfft.max()
+    tiltfft = tiltfft + 1e-30
+    if ori == 'V':
+        alabel = 'y'
+    else:
+        alabel='x'
+    title = 'spatial spectrum at '+label
+    if if_log == 1:
+        tiltfft = np.log(tiltfft)
+        title = title+', log'
+    plt.imshow(tiltfft, cmap='jet',
+        extent = [axis_ev.max(), axis_ev.min(),axis.min()*1e6,axis.max()*1e6])
+    plt.colorbar()
+    if if_log == 1:
+        cmin = np.max(tiltfft)-10
+        plt.clim(cmin)
+    plt.axis('tight')
+    plt.title(title, fontsize=18)
+    plt.xlabel('eV', fontsize=18)
+    plt.ylabel(alabel+r'($\mu$m)', fontsize=18)
+
+def plot_tilt_freq_from_wf(wf, label=None, ori='V', if_log=0):
+    axis, tilt = get_tilt(wf, ori=ori)
+    _, axis_ev, _ = get_spectra(wf)
+    tiltfft = np.fft.fft(tilt, axis=1)
+    tiltfft = np.abs(np.fft.fftshift(tiltfft,axes=1))
+    plot_tilt_freq(axis, tiltfft, axis_ev, label=label, ori=ori, if_log=if_log)
+
+def plot_tilt_freq_from_file(fname, label=None, if_log=0):
+    with h5py.File(fname,'r') as f:
+        axis = f["structure/axis"][:]
+        tilt = f["structure/tilt"][:]
+        ori = f["structure/ori"][...]
+        
+        axis_ev = f["spectrum/axis"][:]
+    tiltfft = np.fft.fft(tilt, axis=1)
+    tiltfft = np.abs(np.fft.fftshift(tiltfft,axes=1))
+    plot_tilt_freq(axis, tiltfft, axis_ev, label=label, ori=ori, if_log=if_log)
+
+''' ancient functions '''
 def get_tslice_lineout(wf_holder,if_norm=1):
     N = len(wf_holder)
     ny, nx, nz = wf_holder[0].get_intensity().shape
