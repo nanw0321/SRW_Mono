@@ -147,46 +147,30 @@ def get_temporal_from_file(fname):
         int_ev = f["temporal/intensity"][:]
     return aw, axis_ev, int_ev
 
+def get_tilt_from_file(fname):
+    with h5py.File(fname,'r') as f:
+        axis = f["structure/axis"][:]
+        tilt = f["structure/tilt"][:]
+        ori = f["structure/ori"][...]
+        axis_t = f["temporal/axis"][:]
+    return axis, tilt, axis_t, ori
+
+def get_lineout_from_file(fname):
+   axis, tilt, axis_t, ori = get_tilt_from_file(fname)
+   lineout = tilt.sum(axis=1)
+   return axis*1e6, lineout, ori
+
+def get_power_from_file(fname):
+    axis, lineout, ori = get_lineout_from_file(fname)
+    power = np.square(lineout.sum())
+    return power
+
+def get_throughput_from_file(fname_in, fname_OE):
+    power_in = get_power_from_file(fname_in)
+    power_oe = get_power_from_file(fname_OE)
+    return power_oe/power_in
+
 ''' plot wavefront '''
-def plot_spatial(wf):
-    srwl.SetRepresElecField(wf._srwl_wf, 't')
-    [xmin, xmax, ymin, ymax] = wf.get_limits()
-    img = wf.get_intensity().sum(axis=-1)
-    plt.figure()
-    plt.imshow(img,cmap='jet',
-        extent = [xmin*1e6, xmax*1e6, ymin*1e6, ymax*1e6])
-    plt.colorbar()
-    plt.xlabel(r'x ($\mu$m)',fontsize=18)
-    plt.ylabel(r'y ($\mu$m)',fontsize=18)
-
-def plot_lineout(wf, color, label=None, fov=1e30, ori='V', if_log=1, if_norm=0):
-    srwl.SetRepresElecField(wf._srwl_wf, 't')
-    mesh = wf.params.Mesh
-    [xmin, xmax, ymin, ymax] = wf.get_limits()
-    img = wf.get_intensity().sum(axis=-1)
-    if ori == 'V':
-        # vertical plane
-        axis = np.linspace(ymin, ymax, mesh.ny) * 1e6
-        lineout = img[:,int(mesh.nx/2)]
-        aname = 'y'
-    else:
-        # horizontal plane
-        axis = np.linspace(xmin, xmax, mesh.nx) * 1e6
-        lineout = img[int(mesh.ny/2),:]
-        aname = 'x'
-    if if_norm== 1:
-        lineout = lineout/lineout.sum()
-    index = np.argwhere(np.abs(axis)<fov/2)
-    axis = axis[index.min():index.max()]
-    lineout = lineout[index.min():index.max()]
-    plt.plot(axis, lineout, color, label=label)
-    plt.legend(fontsize=18)
-    plt.title('lineout', fontsize=18)
-    plt.xlabel(aname+r' ($\mu$m}', fontsize=18)
-    plt.ylabel('beam intensity (a.u.)', fontsize=18)
-    if if_log == 1:
-        plt.yscale('log')
-
 def plot_spectra(aw, axis_ev, int0, color, label=None):
     plt.plot(axis_ev, int0/int0.max(), color, label=label)
     plt.ylim([-0.1,1.1])
@@ -213,6 +197,22 @@ def plot_temporal(wf, color, label=None, fov=1e30, pulse_duration = None):
     plt.xlabel('t (fs)',fontsize=18)
     plt.ylabel('normalized temporal energy', fontsize=18)
     return aw, axis_t, int0
+
+def plot_bandwidth(aw, axis_ev, int_in, int_out, color, label=None, if_norm=0):
+    # crop out the meaningful range
+    axis_ev = axis_ev[aw.min():aw.max()]
+    int_in = int_in[aw.min():aw.max()]
+    int_out = int_out[aw.min():aw.max()]
+
+    bandwidth = int_out/int_in
+    ylabel = 'ratio'
+    if if_norm == 1:
+        bandwidth /= bandwidth.max()
+        ylabel = ylabel+' (normalized)'
+    plt.plot(axis_ev, bandwidth, color, label=label)
+    plt.ylim([-0.1, 1.1])
+    plt.xlabel('eV', fontsize=18)
+    plt.ylabel(ylabel, fontsize=18)
 
 ''' wavefront tilting '''
 def plot_tilt(axis, tilt, axis_t, label=None, ori='V', if_log=0):
@@ -243,12 +243,7 @@ def plot_tilt_from_wf(wf, label=None, ori='V', if_log=0):
     plot_tilt(axis, tilt, axis_t, label=label, ori=ori, if_log=if_log)
 
 def plot_tilt_from_file(fname, label=None, if_log=0):
-    with h5py.File(fname,'r') as f:
-        axis = f["structure/axis"][:]
-        tilt = f["structure/tilt"][:]
-        ori = f["structure/ori"][...]
-        
-        axis_t = f["temporal/axis"][:]
+    axis, tilt, axis_t, ori = get_tilt_from_file(fname)
     plot_tilt(axis, tilt, axis_t, label=label, ori=ori, if_log=if_log)
 
 ''' spatial spectral structure '''
@@ -292,6 +287,55 @@ def plot_tilt_freq_from_file(fname, label=None, if_log=0):
     tiltfft = np.abs(np.fft.fftshift(tiltfft,axes=1))
     plot_tilt_freq(axis, tiltfft, axis_ev, label=label, ori=ori, if_log=if_log)
 
+''' spatial profile '''
+def plot_spatial_from_wf(wf):
+    srwl.SetRepresElecField(wf._srwl_wf, 't')
+    [xmin, xmax, ymin, ymax] = wf.get_limits()
+    img = wf.get_intensity().sum(axis=-1)
+    plt.figure()
+    plt.imshow(img,cmap='jet',
+        extent = [xmin*1e6, xmax*1e6, ymin*1e6, ymax*1e6])
+    plt.colorbar()
+    plt.xlabel(r'x ($\mu$m)',fontsize=18)
+    plt.ylabel(r'y ($\mu$m)',fontsize=18)
+
+def plot_lineout(axis, lineout, color, label=None, fov=1e30, ori='V', if_log=1, if_norm=0):
+    if ori == 'V':
+        aname = 'y'
+    else:
+        aname = 'x'
+    if if_norm == 1:
+        lineout /= lineout.sum()
+    index = np.argwhere(np.abs(axis)<fov/2)
+    axis = axis[index.min():index.max()]
+    lineout = lineout[index.min():index.max()]
+    plt.plot(axis, lineout, color, label=label)
+    plt.legend(fontsize=18)
+    plt.title('lineout', fontsize=18)
+    plt.xlabel(aname+r' ($\mu$m}', fontsize=18)
+    plt.ylabel('beam intensity (a.u.)', fontsize=18)
+    if if_log == 1:
+        plt.yscale('log')
+
+def plot_lineout_from_wf(wf, color, label=None, fov=1e30, ori='V', if_log=1, if_norm=0):
+    srwl.SetRepresElecField(wf._srwl_wf, 't')
+    mesh = wf.params.Mesh
+    [xmin, xmax, ymin, ymax] = wf.get_limits()
+    img = wf.get_intensity().sum(axis=-1)
+    if ori == 'V':
+        # vertical plane
+        axis = np.linspace(ymin, ymax, mesh.ny) * 1e6
+        lineout = img[:,int(mesh.nx/2)]
+    else:
+        # horizontal plane
+        axis = np.linspace(xmin, xmax, mesh.nx) * 1e6
+        lineout = img[int(mesh.ny/2),:]
+    plot_lineout(axis, lineout, color, label=label, fov=fov, ori=ori, if_log=if_log, if_norm=if_norm)
+
+def plot_lineout_from_file(fname, color, label=None, fov=1e30, if_log=1, if_norm=0):
+    axis, lineout, ori = get_lineout_from_file(fname)
+    plot_lineout(axis, lineout, color, label=label, fov=fov, ori=ori, if_log=if_log, if_norm=if_norm)
+
 ''' ancient functions '''
 def get_tslice_lineout(wf_holder,if_norm=1):
     N = len(wf_holder)
@@ -332,3 +376,4 @@ def load_wavefront(nslice_t, dirname_prop):
         mwf_temp.load_hdf5(fname)
         wf_holder.append(mwf_temp)
     return wf_holder
+
