@@ -162,7 +162,8 @@ def get_lineout_from_file(fname):
 
 def get_power_from_file(fname):
     axis, lineout, ori = get_lineout_from_file(fname)
-    power = np.square(lineout.sum())
+    daxis = axis[1]-axis[0]
+    power = np.square(lineout.sum()*daxis)
     return power
 
 def get_throughput_from_file(fname_in, fname_OE):
