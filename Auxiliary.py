@@ -163,7 +163,7 @@ def get_lineout_from_file(fname):
 def get_power_from_file(fname):
     axis, lineout, ori = get_lineout_from_file(fname)
     daxis = axis[1]-axis[0]
-    power = np.square(lineout.sum()*daxis)
+    power = lineout.sum()*daxis
     return power
 
 def get_throughput_from_file(fname_in, fname_OE):
@@ -181,7 +181,6 @@ def plot_spectra(aw, axis_ev, int0, color, label=None):
     plt.xlabel('eV',fontsize=18)
     plt.ylabel('normalized spectral energy', fontsize=18)
 
-
 def plot_temporal(wf, color, label=None, fov=1e30, pulse_duration = None):
     aw, axis_t, int0 = get_temporal(wf)
     index = np.argwhere(np.abs(axis_t)<fov/2)
@@ -198,22 +197,6 @@ def plot_temporal(wf, color, label=None, fov=1e30, pulse_duration = None):
     plt.xlabel('t (fs)',fontsize=18)
     plt.ylabel('normalized temporal energy', fontsize=18)
     return aw, axis_t, int0
-
-def plot_bandwidth(aw, axis_ev, int_in, int_out, color, label=None, if_norm=0):
-    # crop out the meaningful range
-    axis_ev = axis_ev[aw.min():aw.max()]
-    int_in = int_in[aw.min():aw.max()]
-    int_out = int_out[aw.min():aw.max()]
-
-    bandwidth = int_out/int_in
-    ylabel = 'ratio'
-    if if_norm == 1:
-        bandwidth /= bandwidth.max()
-        ylabel = ylabel+' (normalized)'
-    plt.plot(axis_ev, bandwidth, color, label=label)
-    plt.ylim([-0.1, 1.1])
-    plt.xlabel('eV', fontsize=18)
-    plt.ylabel(ylabel, fontsize=18)
 
 ''' wavefront tilting '''
 def plot_tilt(axis, tilt, axis_t, label=None, ori='V', if_log=0):
@@ -336,6 +319,34 @@ def plot_lineout_from_wf(wf, color, label=None, fov=1e30, ori='V', if_log=1, if_
 def plot_lineout_from_file(fname, color, label=None, fov=1e30, if_log=1, if_norm=0):
     axis, lineout, ori = get_lineout_from_file(fname)
     plot_lineout(axis, lineout, color, label=label, fov=fov, ori=ori, if_log=if_log, if_norm=if_norm)
+
+''' quantification '''
+def calc_bandwidth(aw, axis_ev):
+    return np.abs(axis_ev[aw.max()] - axis_ev[aw.min()])
+
+def calc_spectral_response(aw, axis_ev, int_in, int_out):
+    response = int_out/int_in
+    return response
+
+def calc_spectral_intensity(aw, axis_ev, int_in, int_out):
+    axis_ev = axis_ev[aw.min():aw.max()]
+    int_in = int_in[aw.min():aw.max()]
+    int_out = int_out[aw.min():aw.max()]
+    response = calc_spectral_response(aw, axis_ev, int_in, int_out)
+    aw_out = np.argwhere(int_out>int_out.max()/100.0)
+    spectral_intensity = np.mean(response[aw_out])
+    return spectral_intensity
+
+def plot_spectral_response(aw, axis_ev, int_in, int_out, color, label=None):
+    axis_ev = axis_ev[aw.min():aw.max()]
+    int_in = int_in[aw.min():aw.max()]
+    int_out = int_out[aw.min():aw.max()]
+    response = calc_spectral_response(aw, axis_ev, int_in, int_out)
+    ylabel = 'ratio'
+    plt.plot(axis_ev, response, color, label=label)
+    plt.ylim([-0.1, 1.1])
+    plt.xlabel('eV', fontsize=18)
+    plt.ylabel(ylabel, fontsize=18)
 
 ''' ancient functions '''
 def get_tslice_lineout(wf_holder,if_norm=1):
